@@ -11,7 +11,7 @@
 - [x] V-Net
 - [ ] U-Net plus plus
 - [ ] attention U-Net
-- [ ]deeplab v1-3
+- [ ] deeplab v1-3
 
 ## support multi-GPU training, synchronized batch normalization
 
