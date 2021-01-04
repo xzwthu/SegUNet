@@ -1,0 +1,66 @@
+
+exp:
+    id: focal ## expriment ID, 实验ID
+    output_dir: data ## 输出路径，包括模型、生成图等
+    cuda: 1 ## whether use GPU or not, use GPU when 1 and CPU when 0
+dataset:
+    root: /Extra/xuzhanwei/cardiac ## input root path, contain images dir and label dir
+    dim: 3 ## data dimension, for example, dim=3 when your data is CT data in .mha format
+    channel: 1 ## data channel, usually 1 for CT or MR, and 3 for natural 2D image.
+    n_classes: 4 ## number of classes
+    ignore_label: 255 ## aimed to ignore some value when calculate loss, not used now.
+    scales: [1] ## multi-scale values, not used now.
+    split: ## data split
+        labeled: train 
+        valid: val 
+        test: test 
+
+dataloader:
+    num_workers: 32  # set to 0 during inference!!!
+
+image:
+    mean:
+        r: 122.675 
+        g: 116.669
+        b: 104.008
+    size: 
+        base: # none
+        train: [24,256,256] # crop size
+        test: [24,256,256] # crop size
+
+network: # network name and its parameters when defination needed
+    name: unet 
+    dim: 3
+    n_classes: 4
+    input_channel: 1
+
+init_model: None ## initial model path
+    
+solver:
+    ft: False
+    loss_function: # loss function name and its parameters when defination needed
+        loss_type: focal # "crossentropy" or "focal"
+        class_num: 4
+        alpha: [1,10,10,10]
+        # loss_type: crossentropy
+        # loss_type: dice
+    batch_size:
+        train: 4
+        test: 1
+    iter_tb: 1
+    optimizer:  ## optimizer name and its parameters when defination needed
+        ## sgd 
+        # name: sgd
+        # lr: 1.0e-5
+        # weight_decay: 1.0e-3
+        # momentum: 0.9
+        ## adam
+        name: adam
+        weight_decay: 1.0e-3
+        lr: 1.0e-5
+        
+    epoch_save: 4
+    epoch_start: 0
+    epoch_max: 300
+    lr_scheduler: poly # 'poly','step','cos' # learning change scheduler defination
+
