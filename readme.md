@@ -3,13 +3,13 @@
 ### Currently supported loss functions
 - [x] focal loss
 - [x] dice loss
-- [x] crossEntropy loss
+- [x] cross entropy loss
 - [ ] distance loss
 - [ ] edge loss
 ### Currently supported network structures
 - [x] U-Net 
 - [x] V-Net
-- [ ] U-Net plus plus
+- [ ] U-Net++
 - [ ] attention U-Net
 - [ ] deeplab v1-3
 
