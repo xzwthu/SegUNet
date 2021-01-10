@@ -4,7 +4,7 @@ exp:
     output_dir: data ## 输出路径，包括模型、生成图等
     cuda: 1 ## whether use GPU or not, use GPU when 1 and CPU when 0
 dataset:
-    root: /Extra/xuzhanwei/cardiac ## input root path, contain images dir and label dir
+    root: /Extra/xuzhanwei/brast2019/MICCAI_BraTS_2019_Data_Training ## input root path, contain images dir and label dir
     dim: 3 ## data dimension, for example, dim=3 when your data is CT data in .mha format
     channel: 1 ## data channel, usually 1 for CT or MR, and 3 for natural 2D image.
     n_classes: 4 ## number of classes
@@ -16,7 +16,7 @@ dataset:
         test: test 
 
 dataloader:
-    num_workers: 32  # set to 0 during inference!!!
+    num_workers: 4  # set to 0 during inference!!!
 
 image:
     mean:
@@ -25,27 +25,29 @@ image:
         b: 104.008
     size: 
         base: # none
-        train: [24,256,256] # crop size
-        test: [24,256,256] # crop size
+        train: [128,128,128] # crop size
+        test: [128,128,128] # crop size
 
 network: # network name and its parameters when defination needed
-    name: unet 
+    name: vnet 
     dim: 3
     n_classes: 4
-    input_channel: 1
+    input_channel: 4
+    bn_type: batch
 
 init_model: None ## initial model path
     
 solver:
     ft: False
     loss_function: # loss function name and its parameters when defination needed
-        loss_type: focal # "crossentropy" or "focal"
-        class_num: 4
-        alpha: [1,10,10,10]
+        # loss_type: focal # "crossentropy" or "focal"
+        # class_num: 4
+        # alpha: [1,10,10,10]
         # loss_type: crossentropy
-        # loss_type: dice
+        loss_type: dice
     batch_size:
-        train: 4
+        train: 8
+        first_gpu_size: 2
         test: 1
     iter_tb: 1
     optimizer:  ## optimizer name and its parameters when defination needed

@@ -18,11 +18,9 @@ class GradBlock(nn.Module):
         return out
 
 class BasicBlock(nn.Module):
-    def __init__(self,dim,block_depth,in_channels, out_channels, kernel_size=3, stride=1, padding=1, batchnorm=True):
+    def __init__(self,block_depth,in_channels, out_channels, kernel_size=3, stride=1, padding=1, batchnorm=True):
         super(BasicBlock, self).__init__()
-        conv_fn = getattr(nn, "Conv{0}d".format(dim))
-        # bn_fn = getattr(syncBN, "SynchronizedBatchNorm{0}d".format(dim))
-        bn_fn = getattr(nn,'InstanceNorm{0}d'.format(dim))
+        global conv_fn,bn_fn
         self.layer = []
         self.depth = block_depth
         self.layer.append(nn.Sequential(
@@ -44,11 +42,9 @@ class BasicBlock(nn.Module):
         return out
     
 class ResidualBlock(nn.Module):
-    def __init__(self,dim,block_depth,in_channels, out_channels, kernel_size=3, stride=1, padding=1, batchnorm=True):
+    def __init__(self,block_depth,in_channels, out_channels, kernel_size=3, stride=1, padding=1, batchnorm=True):
         super(ResidualBlock, self).__init__()
-        conv_fn = getattr(nn, "Conv{0}d".format(dim))
-        # bn_fn = getattr(syncBN, "SynchronizedBatchNorm{0}d".format(dim))
-        bn_fn = getattr(nn,'InstanceNorm{0}d'.format(dim))
+        global conv_fn,bn_fn
         self.layer = []
         self.depth = block_depth
         self.layer.append(nn.Sequential(
@@ -86,7 +82,7 @@ class ResidualBlock(nn.Module):
         return out
 
 class Encoder(nn.Module):
-    def __init__(self, dim, input_channel,channel_expansion=16,blocks = ResidualBlock, block_depth = 1, block_num=4):
+    def __init__(self, input_channel,channel_expansion=16,blocks = ResidualBlock, block_depth = 1, block_num=4):
         super(Encoder,self).__init__()
         self.image_channel = input_channel
         self.block_num = block_num
@@ -94,8 +90,8 @@ class Encoder(nn.Module):
         for i in range(block_num):
             input_channel = self.image_channel if i == 0 else channel_expansion*(2**(i-1))
             output_channel = channel_expansion*(2**(i))
-            stride = 1 if i==0 else (2,2,2)
-            self.enc.append(blocks(dim, block_depth,  int(input_channel), int(output_channel), kernel_size = 3, stride=stride))
+            stride = 1 if i==0 else 2
+            self.enc.append(blocks(block_depth,  int(input_channel), int(output_channel), kernel_size = 3, stride=stride))
     def forward(self,x):
         x_enc = [x]
         for i, l in enumerate(self.enc):
@@ -104,16 +100,16 @@ class Encoder(nn.Module):
         return x_enc
 
 class Decoder(nn.Module):
-    def __init__(self, dim, channel_expansion=16,blocks = ResidualBlock,block_depth = 1, block_num=4):
+    def __init__(self, channel_expansion=16,blocks = ResidualBlock,block_depth = 1, block_num=4):
         super(Decoder,self).__init__()
         self.block_num = block_num
         self.dec = nn.ModuleList()
         for i in range(block_num):
             input_channel = channel_expansion*(2**(block_num-i-1)) if i == 0 else channel_expansion*(2**(block_num-i))
             output_channel = channel_expansion*(2**(block_num-i-2))
-            self.dec.append(blocks(dim,block_depth, int(input_channel), int(output_channel)))
+            self.dec.append(blocks(block_depth, int(input_channel), int(output_channel)))
         self.output_channel = int(output_channel)
-        self.upsample = nn.Upsample(scale_factor=(2,2,2), mode='nearest')
+        self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
 
     def forward(self,x_enc):
         y = x_enc[-1]
@@ -126,11 +122,17 @@ class Decoder(nn.Module):
 
 
 class UNet(nn.Module):
-    def __init__(self, dim, input_channel, n_classes,block_depth=2,block_num=4, bn=None, full_size=True):
+    def __init__(self, dim, input_channel, n_classes,block_depth=2,block_num=4, bn=None, full_size=True, bn_type = 'batch'):
         super(UNet, self).__init__()
         self.dim = dim
-        self.encoder = Encoder(dim,input_channel,block_depth=block_depth,block_num=block_num)
-        self.decoder = Decoder(dim,block_depth=block_depth,block_num=block_num)
+        global conv_fn, bn_fn
+        conv_fn = getattr(nn, "Conv{0}d".format(dim))
+        if bn_type == 'batch':
+            bn_fn = getattr(syncBN, "SynchronizedBatchNorm{0}d".format(dim))
+        else:
+            bn_fn = getattr(nn,'InstanceNorm{0}d'.format(dim))
+        self.encoder = Encoder(input_channel,block_depth=block_depth,block_num=block_num)
+        self.decoder = Decoder(block_depth=block_depth,block_num=block_num)
         # One conv to get the segmentation
         conv_fn = getattr(nn, 'Conv%dd' % dim)
         self.out_conv = conv_fn(self.decoder.output_channel, n_classes, kernel_size=3, padding=1)

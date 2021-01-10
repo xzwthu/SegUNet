@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import sync_batchnorm as syncBN
 
 def passthrough(x, **kwargs):
     return x
@@ -12,30 +12,14 @@ def ELUCons(elu, nchan):
     else:
         return nn.PReLU(nchan)
 
-# normalization between sub-volumes is necessary
-# for good performance
-def ContBatchNorm3d(nchanl):
-    return nn.InstanceNorm3d(nchanl)
-# class ContBatchNorm3d(nn.modules.batchnorm._BatchNorm):
-#     # def _check_input_dim(self, input):
-#     #     if input.dim() != 5:
-#     #         raise ValueError('expected 5D input (got {}D input)'
-#     #                          .format(input.dim()))
-#     #     super(ContBatchNorm3d, self)._check_input_dim(input)
-    
-#     def forward(self, input):
-#         # self._check_input_dim(input)
-#         return F.batch_norm(
-#             input, self.running_mean, self.running_var, self.weight, self.bias,
-#             True, self.momentum, self.eps)
-
 
 class LUConv(nn.Module):
     def __init__(self, nchan, elu):
         super(LUConv, self).__init__()
+        global conv_fn,bn_fn
         self.relu1 = ELUCons(elu, nchan)
-        self.conv1 = nn.Conv3d(nchan, nchan, kernel_size=3, padding=1)
-        self.bn1 = ContBatchNorm3d(nchan)
+        self.conv1 = conv_fn(nchan, nchan, kernel_size=3, padding=1)
+        self.bn1 = bn_fn(nchan)
 
     def forward(self, x):
         out = self.relu1(self.bn1(self.conv1(x)))
@@ -50,10 +34,11 @@ def _make_nConv(nchan, depth, elu):
 
 
 class InputTransition(nn.Module):
-    def __init__(self, outChans, elu):
+    def __init__(self, input_channel, outChans, elu):
         super(InputTransition, self).__init__()
-        self.conv1 = nn.Conv3d(1, outChans, kernel_size=3, padding=1)
-        self.bn1 = ContBatchNorm3d(outChans)
+        global conv_fn,bn_fn
+        self.conv1 = conv_fn(input_channel, outChans, kernel_size=3, padding=1)
+        self.bn1 = bn_fn(outChans)
         self.relu1 = ELUCons(elu, outChans)
 
     def forward(self, x):
@@ -69,9 +54,11 @@ class InputTransition(nn.Module):
 class DownTransition(nn.Module):
     def __init__(self, inChans, nConvs, elu, dropout=False):
         super(DownTransition, self).__init__()
+        global conv_fn,bn_fn
+
         outChans = 2*inChans
-        self.down_conv = nn.Conv3d(inChans, outChans, kernel_size=3, stride=2,padding=1)
-        self.bn1 = ContBatchNorm3d(outChans)
+        self.down_conv = conv_fn(inChans, outChans, kernel_size=3, stride=2,padding=1)
+        self.bn1 = bn_fn(outChans)
         self.do1 = passthrough
         self.relu1 = ELUCons(elu, outChans)
         self.relu2 = ELUCons(elu, outChans)
@@ -90,10 +77,11 @@ class DownTransition(nn.Module):
 class UpTransition(nn.Module):
     def __init__(self, inChans, outChans, nConvs, elu, dropout=False):
         super(UpTransition, self).__init__()
+        global conv_fn,bn_fn
         self.upsacle = nn.Upsample(scale_factor=2, mode='trilinear')
-        self.conv = nn.Conv3d(inChans,outChans//2,kernel_size = 3,padding = 1)
+        self.conv = conv_fn(inChans,outChans//2,kernel_size = 3,padding = 1)
         # self.up_conv = nn.ConvTranspose3d(inChans, outChans // 2, kernel_size=2, stride=2)
-        self.bn1 = ContBatchNorm3d(outChans // 2)
+        self.bn1 = bn_fn(outChans // 2)
         self.do1 = passthrough
         self.do2 = nn.Dropout3d()
         self.relu1 = ELUCons(elu, outChans // 2)
@@ -115,7 +103,8 @@ class UpTransition(nn.Module):
 class OutputTransition(nn.Module):
     def __init__(self, inChans, outChans, elu, nll):
         super(OutputTransition, self).__init__()
-        self.conv2 = nn.Conv3d(inChans, outChans, kernel_size=1)
+        global conv_fn
+        self.conv2 = conv_fn(inChans, outChans, kernel_size=1)
         self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
@@ -135,10 +124,16 @@ class OutputTransition(nn.Module):
 class VNet(nn.Module):
     # the number of convolutions in each layer corresponds
     # to what is in the actual prototxt, not the intent
-    def __init__(self, n_classes = 2, elu=True, nll=False):
+    def __init__(self,dim=3, input_channel=1, n_classes = 2, elu=True, nll=False, bn_type = 'batch'):
         super(VNet, self).__init__()
         basic_channel = 16
-        self.in_tr = InputTransition(basic_channel, elu)
+        global conv_fn, bn_fn
+        conv_fn = getattr(nn, "Conv{0}d".format(dim))
+        if bn_type == 'batch':
+            bn_fn = getattr(syncBN, "SynchronizedBatchNorm{0}d".format(dim))
+        else:
+            bn_fn = getattr(nn,'InstanceNorm{0}d'.format(dim))
+        self.in_tr = InputTransition(input_channel, basic_channel, elu)
         self.down_tr32 = DownTransition(basic_channel, 1, elu)
         self.down_tr64 = DownTransition(basic_channel*2, 2, elu)
         self.down_tr128 = DownTransition(basic_channel*4, 3, elu, dropout=True)

@@ -12,8 +12,9 @@ from time import time
 from libs.optimizers import get_optimizer
 from libs.models import get_network
 from libs.loss import get_lossfunction
-from libs.datasets.base import myDataset
+from libs.datasets.brast import myDataset
 from libs.utils import saver, metric, LR_Scheduler
+from BalancedDataParallel.data_parallel_my import BalancedDataParallel
 
 class Trainer(object):
     def __init__(self, config_path):
@@ -64,7 +65,7 @@ class Trainer(object):
         model_Unet = network_cls(**network_param)
         self.model_Unet = model_Unet
         if self.args.exp.cuda:
-            self.model_Unet = torch.nn.DataParallel(self.model_Unet).cuda()
+            self.model_Unet = BalancedDataParallel(self.args.solver.batch_size.first_gpu_size, self.model_Unet,dim=0).cuda()
         
         # Define Optimizer
         optimizer_cls = get_optimizer(config)
@@ -109,6 +110,7 @@ class Trainer(object):
         tbar = tqdm(self.train_loader)
         num_img_tr = len(self.train_loader)
         for i, sample in enumerate(tbar):
+            # print(str(i)+ ' iteration')
             ids, image, target = sample
             if self.args.exp.cuda:
                 image, target = image.cuda(), target.cuda()
